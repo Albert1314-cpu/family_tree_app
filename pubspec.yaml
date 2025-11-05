@@ -49,7 +49,7 @@ dependencies:
   
   # 图表和可视化
   fl_chart: ^0.66.0
-  tree_view: ^0.0.5
+  # tree_view: ^0.0.5  # 已停止维护，使用 graphview 替代
   
   # 文件操作
   csv: ^5.0.2
