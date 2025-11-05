@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:flutter_typeahead/flutter_typeahead.dart';
 import 'dart:io';
 import 'dart:convert';
 import '../providers/family_tree_provider.dart';
 import '../models/family_tree.dart';
 import '../models/member.dart';
 import '../models/relationship.dart';
+import '../services/search_service.dart';
 import 'create_family_tree_screen.dart';
 import 'family_tree_detail_screen.dart';
 
@@ -19,6 +21,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
   @override
   void initState() {
     super.initState();
@@ -28,33 +33,109 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('族谱制作'),
+        title: _searchQuery.isEmpty
+            ? const Text('族谱制作')
+            : TypeAheadField<FamilyTree>(
+                textFieldConfiguration: TextFieldConfiguration(
+                  controller: _searchController,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: '搜索族谱...',
+                    border: InputBorder.none,
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        setState(() {
+                          _searchQuery = '';
+                          _searchController.clear();
+                        });
+                      },
+                    ),
+                  ),
+                ),
+                suggestionsCallback: (pattern) async {
+                  final provider = context.read<FamilyTreeProvider>();
+                  return SearchService.searchFamilyTrees(
+                    familyTrees: provider.familyTrees,
+                    query: pattern,
+                  );
+                },
+                itemBuilder: (context, suggestion) {
+                  return ListTile(
+                    title: Text(suggestion.name),
+                    subtitle: suggestion.description != null
+                        ? Text(suggestion.description!)
+                        : null,
+                  );
+                },
+                onSuggestionSelected: (suggestion) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => FamilyTreeDetailScreen(
+                        familyTree: suggestion,
+                      ),
+                    ),
+                  );
+                  setState(() {
+                    _searchQuery = '';
+                    _searchController.clear();
+                  });
+                },
+              ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
-        leading: IconButton(
-          icon: const Icon(Icons.upload_file),
-          onPressed: () {
-            print('导入按钮被点击了！');
-            _importFromCSV();
-          },
-          tooltip: '导入族谱',
-        ),
+        leading: _searchQuery.isEmpty
+            ? IconButton(
+                icon: const Icon(Icons.search),
+                onPressed: () {
+                  setState(() {
+                    _searchQuery = 'search';
+                  });
+                },
+                tooltip: '搜索',
+              )
+            : IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () {
+                  setState(() {
+                    _searchQuery = '';
+                    _searchController.clear();
+                  });
+                },
+              ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const CreateFamilyTreeScreen(),
-                ),
-              );
-            },
-            tooltip: '新建族谱',
-          ),
+          if (_searchQuery.isEmpty) ...[
+            IconButton(
+              icon: const Icon(Icons.upload_file),
+              onPressed: () {
+                print('导入按钮被点击了！');
+                _importFromCSV();
+              },
+              tooltip: '导入族谱',
+            ),
+            IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CreateFamilyTreeScreen(),
+                  ),
+                );
+              },
+              tooltip: '新建族谱',
+            ),
+          ],
         ],
       ),
       body: Consumer<FamilyTreeProvider>(
@@ -98,7 +179,15 @@ class _HomeScreenState extends State<HomeScreen> {
             return _buildEmptyState();
           }
 
-          return _buildFamilyTreeList(provider.familyTrees);
+          // 如果正在搜索，显示搜索结果
+          final displayTrees = _searchQuery.isNotEmpty && _searchController.text.isNotEmpty
+              ? SearchService.searchFamilyTrees(
+                  familyTrees: provider.familyTrees,
+                  query: _searchController.text,
+                )
+              : provider.familyTrees;
+
+          return _buildFamilyTreeList(displayTrees);
         },
       ),
     );

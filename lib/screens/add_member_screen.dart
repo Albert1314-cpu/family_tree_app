@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:flutter_datetime_picker_plus/flutter_datetime_picker_plus.dart';
 import 'dart:io';
 import '../providers/family_tree_provider.dart';
 import '../models/family_tree.dart';
@@ -433,40 +435,64 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     
     if (image != null) {
-      setState(() {
-        _photoPath = image.path;
-      });
+      // 使用图片裁剪器
+      final croppedFile = await ImageCropper().cropImage(
+        sourcePath: image.path,
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: '裁剪头像',
+            toolbarColor: Colors.blue,
+            toolbarWidgetColor: Colors.white,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
+          ),
+          IOSUiSettings(
+            title: '裁剪头像',
+            aspectRatioLockEnabled: true,
+            aspectRatioPreset: CropAspectRatioPreset.square,
+          ),
+        ],
+      );
+      
+      if (croppedFile != null) {
+        setState(() {
+          _photoPath = croppedFile.path;
+        });
+      }
     }
   }
 
   Future<void> _selectBirthday() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _birthday ?? DateTime.now(),
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
+    DatePicker.showDatePicker(
+      context,
+      showTitleActions: true,
+      minTime: DateTime(1900, 1, 1),
+      maxTime: DateTime.now(),
+      onConfirm: (date) {
+        setState(() {
+          _birthday = date;
+        });
+      },
+      currentTime: _birthday ?? DateTime.now(),
+      locale: LocaleType.zh,
     );
-    
-    if (picked != null) {
-      setState(() {
-        _birthday = picked;
-      });
-    }
   }
 
   Future<void> _selectDeathday() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _deathday ?? DateTime.now(),
-      firstDate: _birthday ?? DateTime(1900),
-      lastDate: DateTime.now(),
+    DatePicker.showDatePicker(
+      context,
+      showTitleActions: true,
+      minTime: _birthday ?? DateTime(1900, 1, 1),
+      maxTime: DateTime.now(),
+      onConfirm: (date) {
+        setState(() {
+          _deathday = date;
+        });
+      },
+      currentTime: _deathday ?? DateTime.now(),
+      locale: LocaleType.zh,
     );
-    
-    if (picked != null) {
-      setState(() {
-        _deathday = picked;
-      });
-    }
   }
 
   Future<void> _createMember() async {
