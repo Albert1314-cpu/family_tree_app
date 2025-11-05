@@ -407,9 +407,9 @@ class CloudSyncService {
 
   // 实时监听家族树变化
   Stream<List<FamilyTree>> watchFamilyTrees() {
-    if (!isLoggedIn) return Stream.value([]);
+    if (!isFirebaseAvailable || !isLoggedIn) return Stream.value([]);
 
-    return _firestore
+    return _firestore!
         .collection('users')
         .doc(currentUserId)
         .collection('family_trees')
