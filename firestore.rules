@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 用户只能访问自己的数据
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // 允许访问其他用户的家族树（用于协作）
+    // 协作者可以读取/写入协作家族树的数据
+    match /users/{ownerId}/family_trees/{treeId}/members/{memberId} {
+      allow read: if request.auth != null;
+      // 允许协作者写入（通过 addedBy 字段验证）
+      allow write: if request.auth != null && (
+        // 拥有者可以写入
+        request.auth.uid == ownerId ||
+        // 或者是在协作树中添加的成员（通过分享码验证过的用户）
+        exists(/databases/$(database)/documents/shared_trees/$(resource.data.get('shareCode', '')) && 
+               resource.data.get('isCollaborative', false) == true)
+      );
+    }
+    
+    // 分享的家族树（任何人都可以读取分享信息）
+    match /shared_trees/{shareId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.ownerId == request.auth.uid;
+    }
+    
+    // 协作家族树信息
+    match /collaborative_trees/{treeId}/collaborators/{collaboratorId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && (
+        // 可以添加自己为协作者（通过分享码验证后）
+        request.auth.uid == collaboratorId ||
+        // 或者家族树拥有者可以管理协作者
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)/family_trees/$(treeId))
+      );
+    }
+  }
+}
+
