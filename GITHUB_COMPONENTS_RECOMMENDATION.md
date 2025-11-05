@@ -119,14 +119,47 @@ flutter_tags: ^0.5.0
 
 ### 12. **flutter_colorpicker** ⭐⭐⭐⭐
 **GitHub**: https://github.com/mchome/flutter_colorpicker
+**Pub.dev**: https://pub.dev/packages/flutter_colorpicker
 ```yaml
 flutter_colorpicker: ^1.0.0
 ```
-**用途**: 颜色选择器
+**用途**: 颜色选择器组件
 **适用场景**:
-- 自定义主题颜色
-- 成员分组颜色
-- 家族树节点颜色
+- 自定义主题颜色（设置页面）
+- 成员分组颜色（不同辈分用不同颜色）
+- 家族树节点颜色（可视化区分）
+- 标记重要成员
+
+**使用示例**:
+```dart
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+
+// 显示颜色选择器对话框
+showDialog(
+  context: context,
+  builder: (context) => AlertDialog(
+    title: Text('选择颜色'),
+    content: SingleChildScrollView(
+      child: BlockPicker(
+        pickerColor: currentColor,
+        onColorChanged: (color) {
+          setState(() => currentColor = color);
+        },
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: Text('确定'),
+      ),
+    ],
+  ),
+);
+```
+
+**替代方案**:
+- **color_picker**: 更轻量级的颜色选择器
+- **flutter_colorpicker**: 功能更全，支持多种选择器样式
 
 ## 📅 日期和时间
 
