@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_core/firebase_core.dart';
 import '../models/family_tree.dart';
 import '../models/member.dart';
 
@@ -33,16 +34,41 @@ class CloudSyncService {
   factory CloudSyncService() => _instance;
   CloudSyncService._internal();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
+  // 延迟初始化 Firebase 服务，避免在 Firebase 未配置时崩溃
+  FirebaseFirestore? _firestore;
+  FirebaseAuth? _auth;
+  FirebaseStorage? _storage;
+  
+  bool _isFirebaseAvailable = false;
+
+  // 检查 Firebase 是否可用
+  bool get isFirebaseAvailable {
+    if (!_isFirebaseAvailable) {
+      try {
+        _isFirebaseAvailable = Firebase.apps.isNotEmpty;
+        if (_isFirebaseAvailable) {
+          _firestore ??= FirebaseFirestore.instance;
+          _auth ??= FirebaseAuth.instance;
+          _storage ??= FirebaseStorage.instance;
+        }
+      } catch (e) {
+        _isFirebaseAvailable = false;
+        print('Firebase 不可用: $e');
+      }
+    }
+    return _isFirebaseAvailable;
+  }
 
   // 获取当前用户ID
-  String? get currentUserId => _auth.currentUser?.uid;
-  bool get isLoggedIn => _auth.currentUser != null;
+  String? get currentUserId => isFirebaseAvailable ? _auth?.currentUser?.uid : null;
+  bool get isLoggedIn => isFirebaseAvailable && _auth?.currentUser != null;
 
   // 用户认证 - 手机号登录
   Future<bool> signInWithPhone(String phoneNumber, String verificationCode) async {
+    if (!isFirebaseAvailable) {
+      print('Firebase 未配置，无法使用手机号登录');
+      return false;
+    }
     try {
       // 这里需要实现完整的手机验证流程
       // 简化版本，实际使用时需要完整实现
@@ -55,12 +81,17 @@ class CloudSyncService {
 
   // 匿名登录（快速开始，带重试机制）
   Future<bool> signInAnonymously() async {
+    if (!isFirebaseAvailable) {
+      print('Firebase 未配置，跳过匿名登录');
+      return false;
+    }
+    
     int maxRetries = 3;
     int retryCount = 0;
     
     while (retryCount < maxRetries) {
       try {
-        await _auth.signInAnonymously();
+        await _auth!.signInAnonymously();
         return true;
       } on FirebaseAuthException catch (e) {
         // 网络错误可以重试，其他认证错误直接抛出
@@ -101,12 +132,17 @@ class CloudSyncService {
 
   // 邮箱登录（带重试机制）
   Future<bool> signInWithEmail(String email, String password) async {
+    if (!isFirebaseAvailable) {
+      print('Firebase 未配置，无法使用邮箱登录');
+      return false;
+    }
+    
     int maxRetries = 3;
     int retryCount = 0;
     
     while (retryCount < maxRetries) {
       try {
-        await _auth.signInWithEmailAndPassword(email: email, password: password);
+        await _auth!.signInWithEmailAndPassword(email: email, password: password);
         return true;
       } on FirebaseAuthException catch (e) {
         // 网络错误可以重试，其他认证错误直接抛出
@@ -147,12 +183,17 @@ class CloudSyncService {
 
   // 邮箱注册（带重试机制）
   Future<bool> signUpWithEmail(String email, String password) async {
+    if (!isFirebaseAvailable) {
+      print('Firebase 未配置，无法使用邮箱注册');
+      return false;
+    }
+    
     int maxRetries = 3;
     int retryCount = 0;
     
     while (retryCount < maxRetries) {
       try {
-        await _auth.createUserWithEmailAndPassword(email: email, password: password);
+        await _auth!.createUserWithEmailAndPassword(email: email, password: password);
         return true;
       } on FirebaseAuthException catch (e) {
         // 网络错误可以重试，其他认证错误直接抛出
@@ -193,15 +234,18 @@ class CloudSyncService {
 
   // 登出
   Future<void> signOut() async {
-    await _auth.signOut();
+    if (!isFirebaseAvailable) {
+      return;
+    }
+    await _auth!.signOut();
   }
 
   // 上传家族树到云端
   Future<bool> uploadFamilyTree(FamilyTree familyTree) async {
-    if (!isLoggedIn) return false;
+    if (!isFirebaseAvailable || !isLoggedIn) return false;
 
     try {
-      await _firestore
+      await _firestore!
           .collection('users')
           .doc(currentUserId)
           .collection('family_trees')
@@ -225,7 +269,7 @@ class CloudSyncService {
 
   // 上传家族成员
   Future<bool> uploadMember(String familyTreeId, Member member) async {
-    if (!isLoggedIn) return false;
+    if (!isFirebaseAvailable || !isLoggedIn) return false;
 
     try {
       // 如果有照片，先上传照片
@@ -234,7 +278,7 @@ class CloudSyncService {
         photoUrl = await uploadPhoto(familyTreeId, member.id, member.photoPath!);
       }
 
-      await _firestore
+      await _firestore!
           .collection('users')
           .doc(currentUserId)
           .collection('family_trees')
@@ -269,13 +313,13 @@ class CloudSyncService {
 
   // 上传照片到云存储
   Future<String?> uploadPhoto(String familyTreeId, String memberId, String localPath) async {
-    if (!isLoggedIn) return null;
+    if (!isFirebaseAvailable || !isLoggedIn) return null;
 
     try {
       final file = File(localPath);
       if (!await file.exists()) return null;
 
-      final ref = _storage
+      final ref = _storage!
           .ref()
           .child('users')
           .child(currentUserId!)
@@ -295,10 +339,10 @@ class CloudSyncService {
 
   // 下载所有家族树
   Future<List<FamilyTree>> downloadFamilyTrees() async {
-    if (!isLoggedIn) return [];
+    if (!isFirebaseAvailable || !isLoggedIn) return [];
 
     try {
-      final snapshot = await _firestore
+      final snapshot = await _firestore!
           .collection('users')
           .doc(currentUserId)
           .collection('family_trees')
@@ -324,10 +368,10 @@ class CloudSyncService {
 
   // 下载家族成员
   Future<List<Member>> downloadMembers(String familyTreeId) async {
-    if (!isLoggedIn) return [];
+    if (!isFirebaseAvailable || !isLoggedIn) return [];
 
     try {
-      final snapshot = await _firestore
+      final snapshot = await _firestore!
           .collection('users')
           .doc(currentUserId)
           .collection('family_trees')
@@ -388,7 +432,7 @@ class CloudSyncService {
 
   // 分享家族树给其他用户（支持协作模式）
   Future<String> shareFamilyTree(String familyTreeId, {bool enableCollaboration = true}) async {
-    if (!isLoggedIn) return '';
+    if (!isFirebaseAvailable || !isLoggedIn) return '';
 
     try {
       // 如果启用协作，先设置为协作模式
@@ -397,7 +441,7 @@ class CloudSyncService {
       }
       
       // 创建分享链接
-      final shareDoc = await _firestore.collection('shared_trees').add({
+      final shareDoc = await _firestore!.collection('shared_trees').add({
         'ownerId': currentUserId,
         'familyTreeId': familyTreeId,
         'isCollaborative': enableCollaboration,
@@ -414,12 +458,12 @@ class CloudSyncService {
 
   // 通过分享码访问家族树（并加入协作）
   Future<FamilyTree?> accessSharedTree(String shareCode) async {
-    if (!isLoggedIn) {
+    if (!isFirebaseAvailable || !isLoggedIn) {
       throw Exception('请先登录账户');
     }
 
     try {
-      final shareDoc = await _firestore.collection('shared_trees').doc(shareCode).get();
+      final shareDoc = await _firestore!.collection('shared_trees').doc(shareCode).get();
       
       if (!shareDoc.exists) {
         throw Exception('分享码不存在，请检查分享码是否正确');
@@ -439,7 +483,7 @@ class CloudSyncService {
       final familyTreeId = data['familyTreeId'];
 
       // 获取家族树信息
-      final treeDoc = await _firestore
+      final treeDoc = await _firestore!
           .collection('users')
           .doc(ownerId)
           .collection('family_trees')
@@ -486,11 +530,11 @@ class CloudSyncService {
 
   // 启用协作模式（将家族树转为协作树）
   Future<bool> enableCollaborationMode(String familyTreeId) async {
-    if (!isLoggedIn) return false;
+    if (!isFirebaseAvailable || !isLoggedIn) return false;
 
     try {
       // 先检查家族树是否存在
-      final treeDoc = await _firestore
+      final treeDoc = await _firestore!
           .collection('users')
           .doc(currentUserId)
           .collection('family_trees')
@@ -503,7 +547,7 @@ class CloudSyncService {
       }
       
       // 更新家族树为协作模式
-      await _firestore
+      await _firestore!
           .collection('users')
           .doc(currentUserId)
           .collection('family_trees')
@@ -525,8 +569,10 @@ class CloudSyncService {
 
   // 添加协作者
   Future<bool> _addCollaborator(String familyTreeId, String userId) async {
+    if (!isFirebaseAvailable) return false;
+    
     try {
-      await _firestore
+      await _firestore!
           .collection('collaborative_trees')
           .doc(familyTreeId)
           .collection('collaborators')
@@ -544,10 +590,10 @@ class CloudSyncService {
 
   // 获取协作者列表
   Future<List<String>> getCollaborators(String familyTreeId) async {
-    if (!isLoggedIn) return [];
+    if (!isFirebaseAvailable || !isLoggedIn) return [];
 
     try {
-      final snapshot = await _firestore
+      final snapshot = await _firestore!
           .collection('collaborative_trees')
           .doc(familyTreeId)
           .collection('collaborators')
@@ -562,10 +608,10 @@ class CloudSyncService {
 
   // 从云端加载协作家族树的成员（一次性加载）
   Future<List<Member>> loadCollaborativeMembers(String familyTreeId, String ownerId) async {
-    if (!isLoggedIn) return [];
+    if (!isFirebaseAvailable || !isLoggedIn) return [];
 
     try {
-      final snapshot = await _firestore
+      final snapshot = await _firestore!
           .collection('users')
           .doc(ownerId)
           .collection('family_trees')
@@ -601,10 +647,10 @@ class CloudSyncService {
 
   // 根据分享码获取 ownerId（用于加载协作数据）
   Future<String?> getOwnerIdByShareCode(String shareCode) async {
-    if (!isLoggedIn) return null;
+    if (!isFirebaseAvailable || !isLoggedIn) return null;
 
     try {
-      final shareDoc = await _firestore.collection('shared_trees').doc(shareCode).get();
+      final shareDoc = await _firestore!.collection('shared_trees').doc(shareCode).get();
       if (!shareDoc.exists) return null;
       return shareDoc.data()?['ownerId'] as String?;
     } catch (e) {
@@ -615,9 +661,9 @@ class CloudSyncService {
 
   // 实时监听协作家族树的数据变化（成员变化）
   Stream<List<Member>> watchCollaborativeMembers(String familyTreeId, String ownerId) {
-    if (!isLoggedIn) return Stream.value([]);
+    if (!isFirebaseAvailable || !isLoggedIn) return Stream.value([]);
 
-    return _firestore
+    return _firestore!
         .collection('users')
         .doc(ownerId)
         .collection('family_trees')
@@ -654,7 +700,7 @@ class CloudSyncService {
     String ownerId,
     Member member,
   ) async {
-    if (!isLoggedIn) return false;
+    if (!isFirebaseAvailable || !isLoggedIn) return false;
 
     try {
       // 上传到原拥有者的家族树（其他用户通过监听可以看到）
@@ -663,7 +709,7 @@ class CloudSyncService {
         photoUrl = await uploadPhoto(familyTreeId, member.id, member.photoPath!);
       }
 
-      await _firestore
+      await _firestore!
           .collection('users')
           .doc(ownerId)
           .collection('family_trees')
@@ -703,10 +749,10 @@ class CloudSyncService {
     String ownerId,
     String memberId,
   ) async {
-    if (!isLoggedIn) return false;
+    if (!isFirebaseAvailable || !isLoggedIn) return false;
 
     try {
-      await _firestore
+      await _firestore!
           .collection('users')
           .doc(ownerId)
           .collection('family_trees')
@@ -724,11 +770,11 @@ class CloudSyncService {
 
   // 删除云端家族树
   Future<bool> deleteFamilyTree(String familyTreeId) async {
-    if (!isLoggedIn) return false;
+    if (!isFirebaseAvailable || !isLoggedIn) return false;
 
     try {
       // 删除所有成员
-      final membersSnapshot = await _firestore
+      final membersSnapshot = await _firestore!
           .collection('users')
           .doc(currentUserId)
           .collection('family_trees')
@@ -741,7 +787,7 @@ class CloudSyncService {
       }
 
       // 删除家族树
-      await _firestore
+      await _firestore!
           .collection('users')
           .doc(currentUserId)
           .collection('family_trees')
@@ -777,11 +823,11 @@ class CloudSyncService {
 
   // 从云端同步到本地
   Future<Map<String, dynamic>?> syncFromCloud(String familyTreeId) async {
-    if (!isLoggedIn) return null;
+    if (!isFirebaseAvailable || !isLoggedIn) return null;
 
     try {
       // 下载家族树
-      final treeDoc = await _firestore
+      final treeDoc = await _firestore!
           .collection('users')
           .doc(currentUserId)
           .collection('family_trees')
