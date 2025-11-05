@@ -32,9 +32,9 @@ class PdfExportService {
                   ),
                 ),
                 pw.SizedBox(height: 20),
-                if (familyTree.description != null)
+                if (familyTree.notes != null)
                   pw.Text(
-                    familyTree.description!,
+                    familyTree.notes!,
                     style: pw.TextStyle(fontSize: 16),
                   ),
                 pw.SizedBox(height: 40),

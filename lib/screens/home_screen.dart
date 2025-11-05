@@ -72,8 +72,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 itemBuilder: (context, suggestion) {
                   return ListTile(
                     title: Text(suggestion.name),
-                    subtitle: suggestion.description != null
-                        ? Text(suggestion.description!)
+                    subtitle: suggestion.surname != null
+                        ? Text('姓氏: ${suggestion.surname}')
                         : null,
                   );
                 },

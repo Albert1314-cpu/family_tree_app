@@ -450,7 +450,6 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
           IOSUiSettings(
             title: '裁剪头像',
             aspectRatioLockEnabled: true,
-            aspectRatioPreset: CropAspectRatioPreset.square,
           ),
         ],
       );

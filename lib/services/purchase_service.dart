@@ -86,12 +86,22 @@ class PurchaseService {
     }
   }
   
-  // 恢复购买
+  // 恢复购买（私有方法，用于初始化）
   Future<void> _restorePurchases() async {
     try {
       await _inAppPurchase.restorePurchases();
     } catch (e) {
       print('Restore purchases failed: $e');
+    }
+  }
+  
+  // 恢复购买（公共方法，用于用户手动恢复）
+  Future<void> restorePurchases() async {
+    try {
+      await _inAppPurchase.restorePurchases();
+    } catch (e) {
+      print('Restore purchases failed: $e');
+      rethrow;
     }
   }
   

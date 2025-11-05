@@ -56,9 +56,9 @@ class SearchService {
         return true;
       }
       
-      // 按描述搜索
-      if (tree.description != null && 
-          tree.description!.toLowerCase().contains(lowerQuery)) {
+      // 按备注搜索
+      if (tree.notes != null && 
+          tree.notes!.toLowerCase().contains(lowerQuery)) {
         return true;
       }
       
